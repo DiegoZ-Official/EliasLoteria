@@ -40,7 +40,25 @@ h1 {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.inputGroup {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.inputGroup label {
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.inputGroup.hasError {
   margin-bottom: 14px;
 }
 
@@ -64,12 +82,40 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button.secondary {
+  background: #f3f0eb;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.secondary:hover {
+  background: #e7e3dc;
+}
+
 input {
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   font-size: 1rem;
   width: 100%;
+}
+
+.inputGroup input.invalid {
+  border-color: #d14343;
+  box-shadow: 0 0 0 2px rgba(209, 67, 67, 0.18);
+}
+
+.error {
+  color: #d14343;
+  font-size: 0.85rem;
+  min-height: 0;
+  margin-top: 2px;
+}
+
+.actionRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .hidden {
@@ -86,6 +132,38 @@ input {
 #roomDisplay {
   margin: 0 0 8px;
   font-weight: bold;
+}
+
+#playerTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.playerTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #f3f0eb;
+  border: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+
+.playerTag .pillCount {
+  background: white;
+  color: var(--primary);
+  border-radius: 12px;
+  padding: 2px 8px;
+  border: 1px solid #f0d9df;
+  font-weight: 700;
+}
+
+.playerTag.me {
+  border-color: var(--primary);
+  background: #ffeef1;
 }
 
 #gameMeta {
@@ -128,7 +206,12 @@ input {
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: clamp(18px, 5vw, 26px);
+  font-size: clamp(12px, 3.6vw, 20px);
+  line-height: 1.1;
+  text-align: center;
+  padding: 8px;
+  word-break: break-word;
+  white-space: normal;
   color: #2c2c2c;
   cursor: pointer;
   user-select: none;
@@ -168,14 +251,14 @@ input {
   #setup {
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 12px;
   }
 
-  #setup input {
+  .inputGroup {
     flex: 1 1 100%;
   }
 
-  #setup button {
-    flex: 1 1 calc(50% - 5px);
+  .actionRow {
+    width: 100%;
   }
 }

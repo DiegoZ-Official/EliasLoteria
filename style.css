@@ -1,65 +1,181 @@
+:root {
+  --bg: #f6f3ee;
+  --primary: #ef4d62;
+  --primary-dark: #d43c50;
+  --card: #ffffff;
+  --text: #1f1f1f;
+  --muted: #6b6b6b;
+  --border: #e4dfd7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-  font-family: Arial, sans-serif;
-  background: #faf8f5;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  background: radial-gradient(circle at top right, #ffe8e8, #f7f2ea 45%);
   margin: 0;
-  padding: 0;
+  padding: 20px 12px 30px;
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: 100vh;
+  color: var(--text);
 }
 
 #container {
-  width: 95%;
-  max-width: 400px;
+  width: 100%;
+  max-width: 520px;
   text-align: center;
+}
+
+h1 {
+  margin: 0 0 16px;
+  letter-spacing: 0.5px;
+}
+
+#setup {
+  background: var(--card);
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 button {
-  background: #f05454;
+  background: var(--primary);
   color: white;
   border: none;
-  border-radius: 8px;
-  padding: 10px 15px;
-  margin: 5px;
+  border-radius: 10px;
+  padding: 12px 15px;
   font-size: 1rem;
   cursor: pointer;
+  width: 100%;
 }
 
 button:hover {
-  background: #d94343;
+  background: var(--primary-dark);
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 input {
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  margin: 5px;
-  width: 60%;
-  text-align: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 1rem;
+  width: 100%;
 }
 
 .hidden {
   display: none;
 }
 
+#gameBoard {
+  background: var(--card);
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+}
+
+#roomDisplay {
+  margin: 0 0 8px;
+  font-weight: bold;
+}
+
+#gameMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+}
+
+#hostControls {
+  margin-bottom: 8px;
+}
+
+#winnerBanner {
+  background: #ffe5e5;
+  border: 1px solid #ffc5c5;
+  color: #b32a2a;
+  padding: 10px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
 #cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-top: 15px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .card {
-  background: #e3e3e3;
-  border-radius: 8px;
-  height: 70px;
+  position: relative;
+  background: #fafafa;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  font-size: 18px;
-  color: #333;
+  font-size: clamp(18px, 5vw, 26px);
+  color: #2c2c2c;
   cursor: pointer;
   user-select: none;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.card.marked::after {
+  content: "";
+  position: absolute;
+  width: 62%;
+  height: 62%;
+  background: rgba(239, 77, 98, 0.18);
+  border: 3px solid rgba(239, 77, 98, 0.6);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+#helperText {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin-top: 10px;
+}
+
+@media (min-width: 540px) {
+  body {
+    padding-top: 40px;
+  }
+
+  button {
+    width: auto;
+  }
+
+  #setup {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  #setup input {
+    flex: 1 1 100%;
+  }
+
+  #setup button {
+    flex: 1 1 calc(50% - 5px);
+  }
 }

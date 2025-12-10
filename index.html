@@ -11,6 +11,7 @@
     <h1>Elias Loteria</h1>
 
     <div id="setup">
+      <input id="nameInput" placeholder="Enter your name" maxlength="20" />
       <button id="createRoom">Create Room</button>
       <input id="roomCode" placeholder="Enter Room Code" maxlength="6" />
       <button id="joinRoom">Join Room</button>
@@ -18,7 +19,16 @@
 
     <div id="gameBoard" class="hidden">
       <p id="roomDisplay"></p>
+      <div id="gameMeta">
+        <span id="playerCount"></span>
+        <span id="timerDisplay">Waiting to start</span>
+      </div>
+      <div id="hostControls" class="hidden">
+        <button id="startGame">Start Game</button>
+      </div>
+      <div id="winnerBanner" class="hidden"></div>
       <div id="cards"></div>
+      <p id="helperText"></p>
     </div>
   </div>
 

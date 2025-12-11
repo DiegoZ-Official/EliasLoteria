@@ -89,9 +89,10 @@ const wordListReady = new Promise(resolve => {
   wordListReadyResolve = resolve;
 });
 initWordListListener();
-waitForWordListReady().then(() => {
-  renderWordList();
-});
+waitForWordListReady()
+  .then(fetchSharedWordListOnce)
+  .then(() => renderWordList());
+fetchSharedWordListOnce();
 
 function randomCode() {
   return Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -194,31 +195,51 @@ function waitForWordListReady() {
   return wordListReady;
 }
 
+async function fetchSharedWordListOnce() {
+  try {
+    const snapshot = await get(ref(db, WORD_LIST_DB_PATH));
+    const data = snapshot.exists() ? snapshot.val() : {};
+    await applyWordListData(data, snapshot.exists());
+    return true;
+  } catch (e) {
+    console.warn("Failed to fetch shared word list", e);
+    return false;
+  }
+}
+
 function initWordListListener() {
   if (detachWordListListener) return;
   detachWordListListener = onValue(ref(db, WORD_LIST_DB_PATH), snapshot => {
     const data = snapshot.val() || {};
-    const nextCustom = normalizeCustomWords(data.customWords || loadLocalCustomWords());
-    const nextRemoved = normalizeRemovedBaseWords(data.removedBaseWords || loadLocalRemovedBaseWords());
-    if (!snapshot.exists()) {
-      set(ref(db, WORD_LIST_DB_PATH), {
+    applyWordListData(data, snapshot.exists());
+  });
+}
+
+async function applyWordListData(data = {}, existsInDb = false) {
+  const nextCustom = normalizeCustomWords(data.customWords || loadLocalCustomWords());
+  const nextRemoved = normalizeRemovedBaseWords(data.removedBaseWords || loadLocalRemovedBaseWords());
+  if (!existsInDb) {
+    try {
+      await set(ref(db, WORD_LIST_DB_PATH), {
         customWords: nextCustom,
         removedBaseWords: nextRemoved,
         updatedAt: Date.now()
-      }).catch(err => console.warn("Failed to seed shared word list", err));
+      });
+    } catch (err) {
+      console.warn("Failed to seed shared word list", err);
     }
-    customWords = nextCustom;
-    removedBaseWords = nextRemoved;
-    persistLocalCustomWords(nextCustom);
-    persistLocalRemovedBaseWords(nextRemoved);
-    if (wordListReadyResolve) {
-      wordListReadyResolve();
-      wordListReadyResolve = null;
-    }
-    if (wordScreen && !wordScreen.classList.contains("hidden")) {
-      renderWordList();
-    }
-  });
+  }
+  customWords = nextCustom;
+  removedBaseWords = nextRemoved;
+  persistLocalCustomWords(nextCustom);
+  persistLocalRemovedBaseWords(nextRemoved);
+  if (wordListReadyResolve) {
+    wordListReadyResolve();
+    wordListReadyResolve = null;
+  }
+  if (wordScreen && !wordScreen.classList.contains("hidden")) {
+    renderWordList();
+  }
 }
 
 async function updateWordState(nextCustomWords = customWords, nextRemovedBaseWords = removedBaseWords) {
@@ -390,10 +411,12 @@ newGameBtn.onclick = async () => {
 };
 
 wordListBtn.onclick = () => {
-  waitForWordListReady().then(() => {
-    renderWordList();
-    showWordScreen();
-  });
+  waitForWordListReady()
+    .then(fetchSharedWordListOnce)
+    .then(() => {
+      renderWordList();
+      showWordScreen();
+    });
 };
 
 backToSetupBtn.onclick = () => {

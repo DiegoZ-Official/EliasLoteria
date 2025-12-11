@@ -29,6 +29,7 @@ const addWordBtn = document.getElementById("addWordBtn");
 const backToSetupBtn = document.getElementById("backToSetup");
 
 const CENTER_WORD = "Queef";
+const WORD_LIST_DB_PATH = "sharedWordList";
 const LOCAL_WORDS_KEY = "eliasCustomWords";
 const LOCAL_REMOVED_KEY = "eliasRemovedBaseWords";
 const MIN_WORD_COUNT = 25;
@@ -82,6 +83,12 @@ let lastWinnerId = null;
 let currentWinnerStarsShown = false;
 let customWords = loadLocalCustomWords();
 let removedBaseWords = loadLocalRemovedBaseWords();
+let detachWordListListener = null;
+let wordListReadyResolve;
+const wordListReady = new Promise(resolve => {
+  wordListReadyResolve = resolve;
+});
+initWordListListener();
 
 function randomCode() {
   return Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -179,6 +186,38 @@ function getWordPool() {
   return [...getActiveBaseWords(), ...customWords];
 }
 
+function waitForWordListReady() {
+  initWordListListener();
+  return wordListReady;
+}
+
+function initWordListListener() {
+  if (detachWordListListener) return;
+  detachWordListListener = onValue(ref(db, WORD_LIST_DB_PATH), snapshot => {
+    const data = snapshot.val() || {};
+    const nextCustom = normalizeCustomWords(data.customWords || loadLocalCustomWords());
+    const nextRemoved = normalizeRemovedBaseWords(data.removedBaseWords || loadLocalRemovedBaseWords());
+    if (!snapshot.exists()) {
+      set(ref(db, WORD_LIST_DB_PATH), {
+        customWords: nextCustom,
+        removedBaseWords: nextRemoved,
+        updatedAt: Date.now()
+      }).catch(err => console.warn("Failed to seed shared word list", err));
+    }
+    customWords = nextCustom;
+    removedBaseWords = nextRemoved;
+    persistLocalCustomWords(nextCustom);
+    persistLocalRemovedBaseWords(nextRemoved);
+    if (wordListReadyResolve) {
+      wordListReadyResolve();
+      wordListReadyResolve = null;
+    }
+    if (wordScreen && !wordScreen.classList.contains("hidden")) {
+      renderWordList();
+    }
+  });
+}
+
 async function updateWordState(nextCustomWords = customWords, nextRemovedBaseWords = removedBaseWords) {
   const normalizedRemoved = normalizeRemovedBaseWords(nextRemovedBaseWords);
   const normalizedRemovedSet = new Set(normalizedRemoved.map(word => word.toLowerCase()));
@@ -197,9 +236,10 @@ async function updateWordState(nextCustomWords = customWords, nextRemovedBaseWor
     customWords: normalizedCustom,
     removedBaseWords: normalizedRemoved
   };
-  await update(ref(db, "gameRooms/" + currentRoom), {
+  await set(ref(db, WORD_LIST_DB_PATH), {
     customWords: normalizedCustom,
-    removedBaseWords: normalizedRemoved
+    removedBaseWords: normalizedRemoved,
+    updatedAt: Date.now()
   });
 }
 
@@ -234,6 +274,7 @@ function ensureName() {
 }
 
 createBtn.onclick = async () => {
+  await waitForWordListReady();
   clearErrors();
   const name = ensureName();
   if (!name) return;
@@ -262,6 +303,7 @@ createBtn.onclick = async () => {
 };
 
 joinBtn.onclick = async () => {
+  await waitForWordListReady();
   clearErrors();
   const name = nameInput.value.trim();
   const code = roomInput.value.trim().toUpperCase();
@@ -293,10 +335,6 @@ joinBtn.onclick = async () => {
   }
 
   const roomData = snapshot.val();
-  customWords = normalizeCustomWords(roomData.customWords || []);
-  removedBaseWords = normalizeRemovedBaseWords(roomData.removedBaseWords || []);
-  persistLocalCustomWords(customWords);
-  persistLocalRemovedBaseWords(removedBaseWords);
   const existingPlayer = roomData.players?.[playerId];
   if (existingPlayer) {
     await update(ref(db, `gameRooms/${code}/players/${playerId}`), {
@@ -320,7 +358,8 @@ startBtn.onclick = async () => {
   });
 };
 
-newGameBtn.onclick = () => {
+newGameBtn.onclick = async () => {
+  await waitForWordListReady();
   if (!currentRoom || !isHost) return;
   if (!currentRoomData?.players) return;
   const nextPlayers = {};
@@ -357,6 +396,7 @@ backToSetupBtn.onclick = () => {
 };
 
 addWordBtn.onclick = async () => {
+  await waitForWordListReady();
   const word = newWordInput.value.trim();
   if (!word) return;
   if (word.toLowerCase() === CENTER_WORD.toLowerCase()) {
@@ -400,10 +440,6 @@ function enterRoom(code) {
 }
 
 function renderRoom(data) {
-  customWords = normalizeCustomWords(data.customWords || []);
-  removedBaseWords = normalizeRemovedBaseWords(data.removedBaseWords || []);
-  persistLocalCustomWords(customWords);
-  persistLocalRemovedBaseWords(removedBaseWords);
   currentRoomData = { ...data, customWords, removedBaseWords };
   if (wordScreen && !wordScreen.classList.contains("hidden")) {
     renderWordList();
@@ -614,6 +650,7 @@ function renderWordList() {
       removeBtn.title = `Need at least ${MIN_WORD_COUNT} words. Add more before removing.`;
     }
     removeBtn.onclick = async () => {
+      await waitForWordListReady();
       if (wouldDropBelowMinimum(1)) {
         alert(`You need at least ${MIN_WORD_COUNT} words. Add more before removing.`);
         return;
@@ -740,7 +777,6 @@ async function leaveRoom() {
   currentRoom = null;
   currentRoomData = null;
   isHost = false;
-  customWords = loadLocalCustomWords();
   gameBoard.classList.add("hidden");
   showSetup();
   cardsContainer.innerHTML = "";

@@ -89,6 +89,9 @@ const wordListReady = new Promise(resolve => {
   wordListReadyResolve = resolve;
 });
 initWordListListener();
+waitForWordListReady().then(() => {
+  renderWordList();
+});
 
 function randomCode() {
   return Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -387,8 +390,10 @@ newGameBtn.onclick = async () => {
 };
 
 wordListBtn.onclick = () => {
-  renderWordList();
-  showWordScreen();
+  waitForWordListReady().then(() => {
+    renderWordList();
+    showWordScreen();
+  });
 };
 
 backToSetupBtn.onclick = () => {

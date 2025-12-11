@@ -59,7 +59,6 @@ const BASE_WORDS = [
 const GRID_SIZE = 5;
 const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
 const CENTER_INDEX = Math.floor(TOTAL_CELLS / 2);
-const CUSTOM_WORDS_KEY = "eliasCustomWords";
 
 const playerId = (() => {
   const stored = localStorage.getItem("eliasPlayerId");
@@ -78,7 +77,7 @@ let detachRoomListener = null;
 let timerInterval = null;
 let lastWinnerId = null;
 let currentWinnerStarsShown = false;
-let customWords = loadCustomWords();
+let customWords = [];
 
 function randomCode() {
   return Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -91,6 +90,33 @@ function shuffle(array) {
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
+}
+
+function normalizeCustomWords(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const cleaned = [];
+  list.forEach(word => {
+    if (typeof word !== "string") return;
+    const trimmed = word.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    cleaned.push(trimmed);
+  });
+  return cleaned;
+}
+
+async function setRoomCustomWords(nextWords) {
+  const normalized = normalizeCustomWords(nextWords);
+  customWords = normalized;
+  if (!currentRoom) return;
+  currentRoomData = {
+    ...(currentRoomData || {}),
+    customWords: normalized
+  };
+  await update(ref(db, "gameRooms/" + currentRoom), { customWords: normalized });
 }
 
 function generateBoard() {
@@ -124,6 +150,7 @@ createBtn.onclick = async () => {
   const name = ensureName();
   if (!name) return;
   const code = randomCode();
+  customWords = [];
   const playerData = buildPlayerPayload(name);
   await set(ref(db, "gameRooms/" + code), {
     createdAt: Date.now(),
@@ -131,6 +158,7 @@ createBtn.onclick = async () => {
     hostId: playerId,
     startTime: null,
     winner: null,
+    customWords,
     players: {
       [playerId]: playerData
     }
@@ -173,6 +201,7 @@ joinBtn.onclick = async () => {
   }
 
   const roomData = snapshot.val();
+  customWords = normalizeCustomWords(roomData.customWords || []);
   const existingPlayer = roomData.players?.[playerId];
   if (existingPlayer) {
     await update(ref(db, `gameRooms/${code}/players/${playerId}`), {
@@ -232,7 +261,11 @@ backToSetupBtn.onclick = () => {
   hideWordScreen();
 };
 
-addWordBtn.onclick = () => {
+addWordBtn.onclick = async () => {
+  if (!currentRoom) {
+    alert("Create or join a room to edit the shared word list.");
+    return;
+  }
   const word = newWordInput.value.trim();
   if (!word) return;
   if (word.toLowerCase() === CENTER_WORD.toLowerCase()) {
@@ -244,10 +277,14 @@ addWordBtn.onclick = () => {
     alert("That word already exists.");
     return;
   }
-  customWords.push(word);
-  saveCustomWords();
-  newWordInput.value = "";
-  renderWordList();
+  try {
+    await setRoomCustomWords([...customWords, word]);
+    newWordInput.value = "";
+    renderWordList();
+  } catch (e) {
+    console.error("Failed to add word", e);
+    alert("Could not add the word. Please try again.");
+  }
 };
 
 exitBtn.onclick = async () => {
@@ -272,6 +309,11 @@ function enterRoom(code) {
 }
 
 function renderRoom(data) {
+  customWords = normalizeCustomWords(data.customWords || []);
+  currentRoomData = { ...data, customWords };
+  if (wordScreen && !wordScreen.classList.contains("hidden")) {
+    renderWordList();
+  }
   const players = data.players || {};
   const me = players[playerId];
   const playerCount = Object.keys(players).length;
@@ -477,10 +519,14 @@ function renderWordList() {
     removeBtn.textContent = isBase ? "Base" : "Remove";
     removeBtn.disabled = isBase;
     if (!isBase) {
-      removeBtn.onclick = () => {
-        customWords = customWords.filter(w => w !== word);
-        saveCustomWords();
-        renderWordList();
+      removeBtn.onclick = async () => {
+        try {
+          await setRoomCustomWords(customWords.filter(w => w !== word));
+          renderWordList();
+        } catch (e) {
+          console.error("Failed to remove word", e);
+          alert("Could not remove the word. Please try again.");
+        }
       };
     }
     row.appendChild(text);
@@ -564,11 +610,12 @@ function buildPlayerPayload(name) {
 function fitCardText(cardNodes) {
   const nodes = Array.from(cardNodes || []);
   nodes.forEach(node => {
-    let size = 38;
-    const minSize = 26;
+    const startSize = Math.min(38, node.clientWidth * 0.32);
+    let size = startSize;
+    const minSize = 18;
     node.style.fontSize = `${size}px`;
-    const maxWidth = node.clientWidth - 8;
-    const maxHeight = node.clientHeight - 8;
+    const maxWidth = node.clientWidth * 0.86;
+    const maxHeight = node.clientHeight * 0.86;
     while (size > minSize && (node.scrollWidth > maxWidth || node.scrollHeight > maxHeight)) {
       size -= 1;
       node.style.fontSize = `${size}px`;
@@ -592,6 +639,7 @@ async function leaveRoom() {
   currentRoom = null;
   currentRoomData = null;
   isHost = false;
+  customWords = [];
   gameBoard.classList.add("hidden");
   showSetup();
   cardsContainer.innerHTML = "";
@@ -637,21 +685,4 @@ async function incrementWins(winnerId) {
   } catch (e) {
     console.error("Failed to increment wins", e);
   }
-}
-
-function loadCustomWords() {
-  try {
-    const raw = localStorage.getItem(CUSTOM_WORDS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(parsed)) {
-      return parsed.filter(w => typeof w === "string" && w.trim()).map(w => w.trim());
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomWords() {
-  localStorage.setItem(CUSTOM_WORDS_KEY, JSON.stringify(customWords));
 }

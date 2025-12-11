@@ -160,8 +160,12 @@ input {
 
 .actionRow {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+#wordListBtn {
+  grid-column: 1 / -1;
 }
 
 .hidden {
@@ -417,7 +421,7 @@ input {
 
 .wordRow .wordText {
   font-family: "Homework Normal", "Helvetica Neue", Arial, sans-serif;
-  font-size: 1.2rem;
+  font-size: 1.5rem;
 }
 
 .wordRow .removeBtn {

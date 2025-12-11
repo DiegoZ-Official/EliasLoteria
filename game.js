@@ -1,5 +1,5 @@
 import { db } from "./firebase.js";
-import { ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+import { ref, set, get, onValue, update, remove } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
 const createBtn = document.getElementById("createRoom");
 const joinBtn = document.getElementById("joinRoom");
@@ -19,9 +19,17 @@ const winnerBanner = document.getElementById("winnerBanner");
 const helperText = document.getElementById("helperText");
 const hostControls = document.getElementById("hostControls");
 const playerTags = document.getElementById("playerTags");
+const playerStars = document.getElementById("playerStars");
+const exitBtn = document.getElementById("exitRoom");
+const wordListBtn = document.getElementById("wordListBtn");
+const wordScreen = document.getElementById("wordScreen");
+const wordListEl = document.getElementById("wordList");
+const newWordInput = document.getElementById("newWordInput");
+const addWordBtn = document.getElementById("addWordBtn");
+const backToSetupBtn = document.getElementById("backToSetup");
 
 const CENTER_WORD = "Queef";
-const cardWords = [
+const BASE_WORDS = [
   "Sprinkle Duty",
   "Thats Corny",
   "Mhmmm",
@@ -51,6 +59,7 @@ const cardWords = [
 const GRID_SIZE = 5;
 const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
 const CENTER_INDEX = Math.floor(TOTAL_CELLS / 2);
+const CUSTOM_WORDS_KEY = "eliasCustomWords";
 
 const playerId = (() => {
   const stored = localStorage.getItem("eliasPlayerId");
@@ -67,6 +76,9 @@ let currentRoomData = null;
 let isHost = false;
 let detachRoomListener = null;
 let timerInterval = null;
+let lastWinnerId = null;
+let currentWinnerStarsShown = false;
+let customWords = loadCustomWords();
 
 function randomCode() {
   return Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -82,7 +94,7 @@ function shuffle(array) {
 }
 
 function generateBoard() {
-  const shuffled = shuffle(cardWords);
+  const shuffled = shuffle(getWordPool());
   const board = [];
   for (let i = 0; i < TOTAL_CELLS; i++) {
     if (i === CENTER_INDEX) {
@@ -211,6 +223,37 @@ newGameBtn.onclick = () => {
     });
 };
 
+wordListBtn.onclick = () => {
+  renderWordList();
+  showWordScreen();
+};
+
+backToSetupBtn.onclick = () => {
+  hideWordScreen();
+};
+
+addWordBtn.onclick = () => {
+  const word = newWordInput.value.trim();
+  if (!word) return;
+  if (word.toLowerCase() === CENTER_WORD.toLowerCase()) {
+    alert("Center word is fixed and cannot be added.");
+    return;
+  }
+  const pool = getWordPool().map(w => w.toLowerCase());
+  if (pool.includes(word.toLowerCase())) {
+    alert("That word already exists.");
+    return;
+  }
+  customWords.push(word);
+  saveCustomWords();
+  newWordInput.value = "";
+  renderWordList();
+};
+
+exitBtn.onclick = async () => {
+  await leaveRoom();
+};
+
 function enterRoom(code) {
   hideSetup();
   gameBoard.classList.remove("hidden");
@@ -233,9 +276,11 @@ function renderRoom(data) {
   const me = players[playerId];
   const playerCount = Object.keys(players).length;
   playerCountDisplay.innerText = "Players: " + playerCount;
+  const isWaiting = data.status === "waiting";
+  helperText.setAttribute("data-waiting", isWaiting ? "true" : "false");
   helperText.innerText =
     data.status === "waiting"
-      ? "Waiting to start. Host can start the timer."
+      ? "Waiting for host to start the game"
       : data.status === "active"
       ? "Tap squares to mark your board."
       : "Game finished. Host can start a new game.";
@@ -250,8 +295,16 @@ function renderRoom(data) {
     winnerBanner.classList.remove("hidden");
     const winnerName = data.winner.name || "Someone";
     winnerBanner.innerText = winnerName + " called Lotería!";
+    if (lastWinnerId !== data.winner.playerId || !currentWinnerStarsShown) {
+      showConfetti();
+      currentWinnerStarsShown = true;
+    }
+    lastWinnerId = data.winner.playerId;
   } else {
     winnerBanner.classList.add("hidden");
+    lastWinnerId = null;
+    currentWinnerStarsShown = false;
+    clearConfetti();
   }
 
   if (data.status === "finished") {
@@ -271,6 +324,7 @@ function renderRoom(data) {
 }
 
 function renderBoard(playerData) {
+  hideWordScreen();
   cardsContainer.innerHTML = "";
   if (!playerData) {
     helperText.innerText = "You are not registered in this room.";
@@ -282,11 +336,15 @@ function renderBoard(playerData) {
 
   board.forEach((emoji, i) => {
     const div = document.createElement("div");
-    div.className = "card" + (marks[i] ? " marked" : "");
+    let cls = "card";
+    if (i === CENTER_INDEX) cls += " center";
+    if (marks[i]) cls += " marked";
+    div.className = cls;
     div.textContent = emoji;
     div.onclick = () => handleCardClick(i);
     cardsContainer.appendChild(div);
   });
+  requestAnimationFrame(() => fitCardText(cardsContainer.querySelectorAll(".card")));
 }
 
 function clearErrors() {
@@ -323,6 +381,27 @@ function hideSetup() {
   setupDiv.setAttribute("aria-hidden", "true");
 }
 
+function showSetup() {
+  setupDiv.classList.remove("hidden");
+  setupDiv.style.display = "";
+  setupDiv.setAttribute("aria-hidden", "false");
+}
+
+function showWordScreen() {
+  if (wordScreen) wordScreen.classList.remove("hidden");
+  setupDiv.classList.add("hidden");
+  if (!currentRoom) gameBoard.classList.add("hidden");
+}
+
+function hideWordScreen() {
+  if (wordScreen) wordScreen.classList.add("hidden");
+  if (!currentRoom) {
+    showSetup();
+  } else {
+    gameBoard.classList.remove("hidden");
+  }
+}
+
 function formatElapsed(ms) {
   const minutes = Math.floor(ms / 60000)
     .toString()
@@ -339,21 +418,74 @@ function normalizeBoard(board) {
   return result;
 }
 
+function getWordPool() {
+  return [...BASE_WORDS, ...customWords];
+}
+
 function renderPlayerTags(players) {
   playerTags.innerHTML = "";
+  if (playerStars) playerStars.innerHTML = "";
+  let anyWins = false;
   const sorted = Object.entries(players).sort(([, a], [, b]) => (a.joinedAt || 0) - (b.joinedAt || 0));
   sorted.forEach(([id, info]) => {
     const tag = document.createElement("div");
     tag.className = "playerTag" + (id === playerId ? " me" : "");
+    const topRow = document.createElement("div");
+    topRow.className = "tagTop";
     const nameSpan = document.createElement("span");
     nameSpan.textContent = info.name || "Player";
     const countSpan = document.createElement("span");
     const markCount = (info.marks || []).filter(Boolean).length;
     countSpan.className = "pillCount";
     countSpan.textContent = markCount;
-    tag.appendChild(nameSpan);
-    tag.appendChild(countSpan);
+    topRow.appendChild(nameSpan);
+    topRow.appendChild(countSpan);
+
+    tag.appendChild(topRow);
     playerTags.appendChild(tag);
+
+    if (playerStars) {
+      const winsRow = document.createElement("div");
+      winsRow.className = "winsRow";
+      const wins = info.wins || 0;
+      if (wins > 0) {
+        anyWins = true;
+        winsRow.textContent = "★".repeat(Math.min(wins, 20));
+        playerStars.appendChild(winsRow);
+      }
+    }
+  });
+
+  if (playerStars) {
+    playerStars.style.display = anyWins ? "flex" : "none";
+  }
+}
+
+function renderWordList() {
+  if (!wordListEl) return;
+  wordListEl.innerHTML = "";
+  const allWords = getWordPool();
+  allWords.forEach(word => {
+    const row = document.createElement("div");
+    row.className = "wordRow";
+    const text = document.createElement("span");
+    text.className = "wordText";
+    text.textContent = word;
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "removeBtn";
+    const isBase = BASE_WORDS.includes(word);
+    removeBtn.textContent = isBase ? "Base" : "Remove";
+    removeBtn.disabled = isBase;
+    if (!isBase) {
+      removeBtn.onclick = () => {
+        customWords = customWords.filter(w => w !== word);
+        saveCustomWords();
+        renderWordList();
+      };
+    }
+    row.appendChild(text);
+    row.appendChild(removeBtn);
+    wordListEl.appendChild(row);
   });
 }
 
@@ -399,6 +531,7 @@ async function declareWin() {
     winner: winnerInfo,
     status: "finished"
   });
+  incrementWins(playerId);
 }
 
 function startTimer(startTime) {
@@ -423,6 +556,102 @@ function buildPlayerPayload(name) {
     name,
     board: generateBoard(),
     marks: Array(TOTAL_CELLS).fill(false),
+    wins: 0,
     joinedAt: Date.now()
   };
+}
+
+function fitCardText(cardNodes) {
+  const nodes = Array.from(cardNodes || []);
+  nodes.forEach(node => {
+    let size = 38;
+    const minSize = 26;
+    node.style.fontSize = `${size}px`;
+    const maxWidth = node.clientWidth - 8;
+    const maxHeight = node.clientHeight - 8;
+    while (size > minSize && (node.scrollWidth > maxWidth || node.scrollHeight > maxHeight)) {
+      size -= 1;
+      node.style.fontSize = `${size}px`;
+    }
+  });
+}
+
+async function leaveRoom() {
+  stopTimer();
+  if (detachRoomListener) {
+    detachRoomListener();
+    detachRoomListener = null;
+  }
+  if (currentRoom) {
+    try {
+      await remove(ref(db, `gameRooms/${currentRoom}/players/${playerId}`));
+    } catch (e) {
+      console.error("Failed to remove player from room", e);
+    }
+  }
+  currentRoom = null;
+  currentRoomData = null;
+  isHost = false;
+  gameBoard.classList.add("hidden");
+  showSetup();
+  cardsContainer.innerHTML = "";
+  playerTags.innerHTML = "";
+  roomDisplay.innerText = "";
+  helperText.innerText = "";
+  winnerBanner.classList.add("hidden");
+  newGameBtn.classList.add("hidden");
+  startBtn.classList.remove("hidden");
+  timerDisplay.innerText = "Waiting to start";
+}
+
+function showConfetti() {
+  clearConfetti();
+  const layer = document.createElement("div");
+  layer.className = "confetti-layer";
+  const pieces = 32;
+  for (let i = 0; i < pieces; i++) {
+    const p = document.createElement("div");
+    p.className = "confetti";
+    const duration = 5 + Math.random() * 3; // 5-8s
+    p.style.left = Math.random() * 100 + "%";
+    p.style.animationDuration = duration + "s";
+    // small positive delay keeps the start at the top while staggering the pieces
+    p.style.animationDelay = Math.random() * 0.6 + "s";
+    p.style.setProperty("--spinDir", Math.random() > 0.5 ? 1 : -1);
+    layer.appendChild(p);
+  }
+  document.body.appendChild(layer);
+}
+
+function clearConfetti() {
+  document.querySelectorAll(".confetti-layer").forEach(el => el.remove());
+}
+
+async function incrementWins(winnerId) {
+  if (!currentRoom) return;
+  const winsRef = ref(db, `gameRooms/${currentRoom}/players/${winnerId}/wins`);
+  try {
+    const snapshot = await get(winsRef);
+    const current = snapshot.exists() ? snapshot.val() : 0;
+    await set(winsRef, current + 1);
+  } catch (e) {
+    console.error("Failed to increment wins", e);
+  }
+}
+
+function loadCustomWords() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_WORDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) {
+      return parsed.filter(w => typeof w === "string" && w.trim()).map(w => w.trim());
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomWords() {
+  localStorage.setItem(CUSTOM_WORDS_KEY, JSON.stringify(customWords));
 }

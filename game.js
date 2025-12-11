@@ -215,16 +215,25 @@ function initWordListListener() {
   });
 }
 
+async function writeSharedWordList(customList, removedList) {
+  try {
+    await set(ref(db, WORD_LIST_DB_PATH), {
+      customWords: customList,
+      removedBaseWords: removedList,
+      updatedAt: Date.now()
+    });
+  } catch (err) {
+    console.error("Failed to write shared word list", err);
+    throw err;
+  }
+}
+
 async function applyWordListData(data = {}, existsInDb = false) {
   const nextCustom = normalizeCustomWords(data.customWords || loadLocalCustomWords());
   const nextRemoved = normalizeRemovedBaseWords(data.removedBaseWords || loadLocalRemovedBaseWords());
   if (!existsInDb) {
     try {
-      await set(ref(db, WORD_LIST_DB_PATH), {
-        customWords: nextCustom,
-        removedBaseWords: nextRemoved,
-        updatedAt: Date.now()
-      });
+      await writeSharedWordList(nextCustom, nextRemoved);
     } catch (err) {
       console.warn("Failed to seed shared word list", err);
     }
@@ -254,17 +263,14 @@ async function updateWordState(nextCustomWords = customWords, nextRemovedBaseWor
   removedBaseWords = normalizedRemoved;
   persistLocalCustomWords(normalizedCustom);
   persistLocalRemovedBaseWords(normalizedRemoved);
-  if (!currentRoom) return;
-  currentRoomData = {
-    ...(currentRoomData || {}),
-    customWords: normalizedCustom,
-    removedBaseWords: normalizedRemoved
-  };
-  await set(ref(db, WORD_LIST_DB_PATH), {
-    customWords: normalizedCustom,
-    removedBaseWords: normalizedRemoved,
-    updatedAt: Date.now()
-  });
+  if (currentRoom) {
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      customWords: normalizedCustom,
+      removedBaseWords: normalizedRemoved
+    };
+  }
+  await writeSharedWordList(normalizedCustom, normalizedRemoved);
 }
 
 function wouldDropBelowMinimum(removalCount = 1) {
@@ -438,6 +444,7 @@ addWordBtn.onclick = async () => {
   }
   try {
     await updateWordState([...customWords, word], removedBaseWords);
+    await fetchSharedWordListOnce();
     newWordInput.value = "";
     renderWordList();
   } catch (e) {

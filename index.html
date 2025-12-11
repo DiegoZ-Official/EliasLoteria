@@ -12,24 +12,26 @@
 
     <div id="setup">
       <div class="inputGroup">
-        <label for="nameInput">Your name</label>
+        <label for="nameInput">YOUR NAME</label>
         <input id="nameInput" placeholder="Required for any room" maxlength="20" />
         <div class="error" id="nameError"></div>
       </div>
       <div class="inputGroup">
-        <label for="roomCode">Room code</label>
+        <label for="roomCode">ROOM CODE</label>
         <input id="roomCode" placeholder="Enter code to join" maxlength="6" />
         <div class="error" id="codeError"></div>
       </div>
       <div class="actionRow">
         <button id="createRoom">Create Room</button>
         <button id="joinRoom">Join Room</button>
+        <button id="wordListBtn" class="secondary">Word List</button>
       </div>
     </div>
 
     <div id="gameBoard" class="hidden">
       <p id="roomDisplay"></p>
       <div id="playerTags"></div>
+      <div id="playerStars"></div>
       <div id="gameMeta">
         <span id="playerCount"></span>
         <span id="timerDisplay">Waiting to start</span>
@@ -39,8 +41,20 @@
         <button id="newGame" class="secondary hidden">Start New Game</button>
       </div>
       <div id="winnerBanner" class="hidden"></div>
-      <div id="cards"></div>
       <p id="helperText"></p>
+      <div id="cards"></div>
+      <button id="exitRoom" class="secondary">Exit Room</button>
+    </div>
+
+    <div id="wordScreen" class="hidden card-panel">
+      <h2>Word List</h2>
+      <p class="muted">Base words cannot be removed. Added words are saved on this device.</p>
+      <div id="wordList"></div>
+      <div id="addWordRow">
+        <input id="newWordInput" placeholder="Add a word" maxlength="30" />
+        <button id="addWordBtn">Add</button>
+      </div>
+      <button id="backToSetup" class="secondary">Back</button>
     </div>
   </div>
 
